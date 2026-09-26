@@ -4,7 +4,6 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h
 Environment=PYTHONPATH=%h/.local
 ExecStart=/usr/bin/python3 -m warden
 Restart=on-failure
