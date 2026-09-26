@@ -20,7 +20,7 @@ def handle_request(conn, addr):
             conn.close()
             return
         
-        print("Received request:", request_data[0:14], '  ....')
+        print("Received request:", request_data)
         
         request_line = request_data.splitlines()[0]
         method, path, http_version = request_line.split()
