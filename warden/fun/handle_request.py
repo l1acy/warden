@@ -76,8 +76,15 @@ def pipe(a, b):
         except OSError:
             pass
 
+def parse_blocked_sites(blocked_sites_raw: str) -> set[str]:
+    return {
+        line.strip().lower()
+        for line in blocked_sites_raw.splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+
 def handle_request(conn, addr, blocked_sites_raw: str):
-    blocked_sites = blocked_sites_raw.splitlines()
+    blocked_sites = parse_blocked_sites(blocked_sites_raw)
     
     try:
         result = read_headers(conn)
@@ -98,7 +105,7 @@ def handle_request(conn, addr, blocked_sites_raw: str):
             else:
                 host = urlsplit(target).hostname or ""
 
-            if host in ("ya.ru", "www.ya.ru"):
+            if host in blocked_sites:
                 body = b"<h1>Access denied</h1>"
                 headers = (
                     f"{http_version} 403 Forbidden\r\n"
