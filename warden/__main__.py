@@ -7,16 +7,24 @@ from warden.fun.handle_request import handle_request
 
 
 def start_server(host, port, blocked_file):
-    print('Try to read', blocked_file)
-    
     blocked_file = os.path.expanduser(blocked_file)
+    print('Try to read', blocked_file)
+
     os.makedirs(os.path.dirname(blocked_file), exist_ok=True)
-    with open(blocked_file, mode='a+') as file:
-        blocked_sites_raw = file.read()
-    print('File read')
-    
+
+    with open(blocked_file, mode='a+', encoding='utf-8') as f:
+        f.seek(0)
+        blocked_sites_raw = f.read()
+
+    blocked_sites = {
+        line.strip().lower()
+        for line in blocked_sites_raw.splitlines()
+        if line.strip() and not line.startswith('#')
+    }
+    print(f'File read: {len(blocked_sites)} entries')
+
     server_address = (host, port)
-    
+
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind(server_address)
@@ -52,7 +60,7 @@ def start_server(host, port, blocked_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog='Warden',
+        prog='warden',
         description='HTTP proxy for website filtering'
     )
     parser.add_argument('--host', default='127.0.0.1', type=str)
@@ -61,4 +69,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    start_server(args.host, args.port, os.path.expanduser(args.blocked_file))
+    start_server(args.host, args.port, args.blocked_file)
