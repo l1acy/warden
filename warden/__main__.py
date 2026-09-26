@@ -1,3 +1,4 @@
+import os
 import socket
 import threading
 import argparse
@@ -5,11 +6,9 @@ import argparse
 from warden.fun.handle_request import handle_request
 
 
-def start_server(*args):
-    host, port, blocked_file = args
-    
+def start_server(host, port, blocked_file):
     print('Try to read', blocked_file)
-    with open(blocked_file, mode='r') as file:
+    with open(os.path.expanduser(blocked_file), mode='r') as file:
         blocked_sites_raw = file.read()
     print('File read')
     
@@ -59,4 +58,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    start_server(args)
+    start_server(args.host, args.port, args.blocked_file)
