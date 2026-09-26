@@ -1,3 +1,4 @@
+import re
 import socket
 import select
 from typing import Set
@@ -77,12 +78,18 @@ def pipe(a, b):
         except OSError:
             pass
 
-def parse_blocked_sites(blocked_sites_raw: str) -> Set[str]:
-    return {
-        line.strip().lower()
-        for line in blocked_sites_raw.splitlines()
-        if line.strip() and not line.startswith("#")
-    }
+def parse_blocked_sites(blocked_sites_raw: str):
+    patterns = []
+    for line in blocked_sites_raw.splitlines():
+        line = line.strip().lower()
+        if not line or line.startswith("#"):
+            continue
+        patterns.append(re.compile(line))
+    return patterns
+
+def is_blocked(host, patterns):
+    host = host.lower()
+    return any(p.search(host) for p in patterns)
 
 def handle_request(conn, addr, blocked_sites_raw: str):
     blocked_sites = parse_blocked_sites(blocked_sites_raw)
@@ -106,7 +113,7 @@ def handle_request(conn, addr, blocked_sites_raw: str):
             else:
                 host = urlsplit(target).hostname or ""
 
-            if host in blocked_sites:
+            if is_blocked(host, blocked_sites):
                 body = b"<h1>Access denied</h1>"
                 headers = (
                     f"{http_version} 403 Forbidden\r\n"
