@@ -1,66 +1,187 @@
-"""Thanks github.com/dynstat/simplest-http-server-Py/tree/main for code"""
-
 import socket
 import threading
+import select
+from urllib.parse import urlsplit
 
-# Define the server address and port
 SERVER_ADDRESS = ("localhost", 8000)
 
-ALLOWED_ORIGINS = [
-    "*",
-    "http://localhost:8000",
-    "null",
-]  # Allow requests from file:// URLs and the same origin
+HOP_BY_HOP = {
+    "proxy-connection",
+    "proxy-authorization",
+    "connection",
+    "keep-alive",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+}
+
+
+def read_headers(conn):
+    buf = b""
+    while b"\r\n\r\n" not in buf:
+        chunk = conn.recv(4096)
+        if not chunk:
+            return None
+        buf += chunk
+    header_part, _, rest = buf.partition(b"\r\n\r\n")
+    return header_part, rest
+
+
+def parse_headers(header_bytes):
+    lines = header_bytes.split(b"\r\n")
+    request_line = lines[0].decode("latin-1")
+    headers = []
+    for line in lines[1:]:
+        if b":" in line:
+            k, v = line.split(b":", 1)
+            headers.append((k.decode("latin-1").strip(), v.decode("latin-1").strip()))
+    return request_line, headers
+
+
+def read_body(conn, headers, initial_body):
+    length = 0
+    for k, v in headers:
+        if k.lower() == "content-length":
+            try:
+                length = int(v)
+            except ValueError:
+                length = 0
+            break
+    body = initial_body
+    while len(body) < length:
+        chunk = conn.recv(4096)
+        if not chunk:
+            break
+        body += chunk
+    return body
+
+
+def pipe(a, b):
+    try:
+        while True:
+            r, _, _ = select.select([a, b], [], [], 1)
+            if not r:
+                continue
+            for s in r:
+                data = s.recv(4096)
+                if not data:
+                    return
+                other = b if s is a else a
+                other.sendall(data)
+    finally:
+        try:
+            a.close()
+        except OSError:
+            pass
+        try:
+            b.close()
+        except OSError:
+            pass
+
 
 def handle_request(conn, addr):
     try:
-        # Receive the HTTP request
-        request_data = conn.recv(1024).decode()
-        if not request_data:
+        result = read_headers(conn)
+        if result is None:
             conn.close()
             return
-        
-        print("Received request:", request_data)
-        
-        request_line = request_data.splitlines()[0]
-        method, path, http_version = request_line.split()
-        
-        print(f'[{method}] {path} (v{http_version})')
-        
-        response_body = b'<h1>Hello, world!</h1>'
-        content_length = len(response_body)
-        
-        response_headers = [
-            f"{http_version} 200",
-            f"Content-Type: text/plain",
-            f"Content-Length: {content_length}",
-            "Connection: close",
-            "Access-Control-Allow-Origin: *",  # Allow all origins for simplicity
-            "Access-Control-Allow-Methods: GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers: Content-Type",
-        ]
-        
-        response_header_str = "\r\n".join(response_headers) + "\r\n\r\n"
-        
-        conn.sendall(response_header_str.encode() + response_body)
+        header_bytes, initial_body = result
+        request_line, headers = parse_headers(header_bytes)
+
+        print("Received request:", request_line)
+
+        try:
+            method, target, http_version = request_line.split()
+        except ValueError:
+            conn.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+            conn.close()
+            return
+
+        print(f'[{method}] {target} (v{http_version})')
+
+        if method.upper() == "CONNECT":
+            if ":" in target:
+                host, port_str = target.rsplit(":", 1)
+                try:
+                    port = int(port_str)
+                except ValueError:
+                    port = 443
+            else:
+                host, port = target, 443
+
+            try:
+                remote = socket.create_connection((host, port), timeout=10)
+            except OSError as e:
+                print(f"CONNECT failed: {e}")
+                try:
+                    conn.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+                except OSError:
+                    pass
+                conn.close()
+                return
+
+            conn.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            if initial_body:
+                remote.sendall(initial_body)
+            pipe(conn, remote)
+            return
+
+        parts = urlsplit(target)
+        if not parts.scheme or not parts.hostname:
+            conn.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+            conn.close()
+            return
+
+        host = parts.hostname
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+
+        path = parts.path or "/"
+        if parts.query:
+            path += "?" + parts.query
+
+        new_headers = []
+        for k, v in headers:
+            if k.lower() in HOP_BY_HOP:
+                continue
+            new_headers.append(f"{k}: {v}")
+        new_headers.append("Connection: close")
+
+        body = read_body(conn, headers, initial_body)
+
+        out = f"{method} {path} {http_version}".encode("latin-1") + b"\r\n"
+        out += b"\r\n".join(h.encode("latin-1") for h in new_headers)
+        out += b"\r\n\r\n"
+        out += body
+
+        try:
+            remote = socket.create_connection((host, port), timeout=10)
+        except OSError as e:
+            print(f"Connect failed: {e}")
+            try:
+                conn.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            except OSError:
+                pass
+            conn.close()
+            return
+
+        remote.sendall(out)
+
+        while True:
+            data = remote.recv(4096)
+            if not data:
+                break
+            conn.sendall(data)
+
+        remote.close()
         conn.close()
+
     except Exception as e:
         print(f"\n************ EXCEPTION : {e} ***********\n")
-        response_body = b"<h1>500 Internal Server Error</h1>"
-        content_length = len(response_body)
-        content_type = "text/html"
-        # Use HTTP/1.1 as a fallback if an exception occurs before HTTP version is determined
-        response_headers = [
-            "HTTP/1.1 500 Internal Server Error",
-            f"Content-Type: {content_type}",
-            f"Content-Length: {content_length}",
-            "Connection: close",
-            f"Access-Control-Allow-Origin: {ALLOWED_ORIGINS[0]}",
-            "Access-Control-Allow-Methods: GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers: Content-Type",
-        ]
-        response_header_str = "\r\n".join(response_headers) + "\r\n\r\n"
-        conn.sendall(response_header_str.encode() + response_body)
+        try:
+            conn.sendall(b"HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n")
+        except OSError:
+            pass
         conn.close()
 
 
@@ -68,21 +189,18 @@ def start_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind(SERVER_ADDRESS)
-    server_socket.listen(5)
+    server_socket.listen(50)
     print(f"Server listening on http://{SERVER_ADDRESS[0]}:{SERVER_ADDRESS[1]}")
 
-    # Setting a timeout of 1 second on blocking socket operations (accept() call) to allow for keyboard interrupt (CTRL + c) recognition in the terminal.
     server_socket.settimeout(1)
 
     try:
         print("Waiting for a connection...")
         while True:
             try:
-                # no more a infinitely blocking call, because of server_socket.settimeout(1)
                 conn, addr = server_socket.accept()
                 print(f"Connection from {addr}")
 
-                # Handle the client request in a new thread
                 client_thread = threading.Thread(
                     target=handle_request, args=(conn, addr), name=f"{addr[1]}"
                 )
