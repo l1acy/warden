@@ -8,6 +8,9 @@ from warden.fun.handle_request import handle_request
 
 def start_server(host, port, blocked_file):
     print('Try to read', blocked_file)
+    
+    blocked_file = os.path.expanduser(blocked_file)
+    os.makedirs(os.path.dirname(blocked_file), exist_ok=True)
     with open(os.path.expanduser(blocked_file), mode='a+') as file:
         blocked_sites_raw = file.read()
     print('File read')
