@@ -11,7 +11,7 @@ def start_server(host, port, blocked_file):
     
     blocked_file = os.path.expanduser(blocked_file)
     os.makedirs(os.path.dirname(blocked_file), exist_ok=True)
-    with open(os.path.expanduser(blocked_file), mode='a+') as file:
+    with open(blocked_file, mode='a+') as file:
         blocked_sites_raw = file.read()
     print('File read')
     
@@ -61,4 +61,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    start_server(args.host, args.port, args.blocked_file)
+    start_server(args.host, args.port, os.path.expanduser(args.blocked_file))
