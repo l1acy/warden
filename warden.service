@@ -1,0 +1,14 @@
+[Unit]
+Description=Warden HTTP proxy
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+Environment=PYTHONPATH=%h/.local
+ExecStart=/usr/bin/python3 -m warden
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
