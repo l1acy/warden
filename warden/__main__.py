@@ -93,6 +93,27 @@ def handle_request(conn, addr):
 
         try:
             method, target, http_version = request_line.split()
+
+            host = ""
+            if method.upper() == "CONNECT":
+                host = target.split(":")[0]
+            else:
+                host = urlsplit(target).hostname or ""
+
+            if host in ("ya.ru", "www.ya.ru"):
+                body = b"<h1>Access denied</h1>"
+                headers = (
+                    f"{http_version} 403 Forbidden\r\n"
+                    f"Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(body)}\r\n"
+                    f"Connection: close\r\n"
+                    f"\r\n"
+                )
+                conn.sendall(headers.encode() + body)
+                conn.close()
+                return
+
+            print(f'[{method}] {target} (v{http_version})')
         except ValueError:
             conn.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
             conn.close()
