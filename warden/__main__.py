@@ -1,7 +1,6 @@
 """Thanks github.com/dynstat/simplest-http-server-Py/tree/main for code"""
 
 import socket
-from socket import socket as Socket, _RetAddress
 import threading
 
 # Define the server address and port
@@ -13,7 +12,7 @@ ALLOWED_ORIGINS = [
     "null",
 ]  # Allow requests from file:// URLs and the same origin
 
-def handle_request(conn: Socket, addr: _RetAddress):
+def handle_request(conn, addr):
     try:
         # Receive the HTTP request
         request_data = conn.recv(1024).decode()
