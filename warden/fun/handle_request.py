@@ -1,5 +1,6 @@
 import socket
 import select
+from typing import Set
 from urllib.parse import urlsplit
 
 HOP_BY_HOP = {
@@ -76,7 +77,7 @@ def pipe(a, b):
         except OSError:
             pass
 
-def parse_blocked_sites(blocked_sites_raw: str) -> set[str]:
+def parse_blocked_sites(blocked_sites_raw: str) -> Set[str]:
     return {
         line.strip().lower()
         for line in blocked_sites_raw.splitlines()
