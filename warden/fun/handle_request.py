@@ -91,9 +91,7 @@ def is_blocked(host, patterns):
     host = host.lower()
     return any(p.search(host) for p in patterns)
 
-def handle_request(conn, addr, blocked_sites_raw: str):
-    blocked_sites = parse_blocked_sites(blocked_sites_raw)
-    
+def handle_request(conn, addr, blocked_sites: list): 
     try:
         result = read_headers(conn)
         if result is None:

@@ -41,7 +41,7 @@ def start_server(host, port, blocked_file):
                 print(f"Connection from {addr}")
 
                 client_thread = threading.Thread(
-                    target=handle_request, args=(conn, addr, blocked_sites_raw), name=f"{addr[1]}"
+                    target=handle_request, args=(conn, addr, blocked_sites), name=f"{addr[1]}"
                 )
                 client_thread.start()
             except socket.timeout:
